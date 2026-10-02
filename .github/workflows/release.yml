@@ -1,0 +1,45 @@
+name: release
+
+# Trusted Publishing via npm OIDC: no long-lived NPM_TOKEN secret.
+# npm verifies cryptographically that the publish request comes from this
+# exact workflow in this exact repository, and ships SLSA provenance.
+#
+# One-time setup on the npm side (https://www.npmjs.com/package/@astroway/render/access):
+#   Trusted Publishers -> Add -> Provider: GitHub Actions
+#     Repository:        astroway/astroway-render
+#     Workflow filename: release.yml
+#     Environment:       (leave empty)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write       # required for npm OIDC + SLSA provenance
+  attestations: write   # required for actions/attest-build-provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run smoke
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/**/*
+      - name: Publish to npm (OIDC trusted publishing)
+        run: npm publish --provenance --access public
+        # NB: no NODE_AUTH_TOKEN: npm verifies OIDC token from id-token: write
+        # permission against the configured Trusted Publisher on npm side.

@@ -1,0 +1,66 @@
+{
+  "name": "@astroway/render",
+  "version": "0.1.1",
+  "description": "The SVG chart renderers behind api.astroway.info /v1/render/*: natal, bi- and tri-wheels, Vedic charts, aspect grid, cosmogram, moon phase, timeline, biorhythm, eclipse path, star map. Pure functions, chart data in, SVG string out, no DOM and no Node APIs.",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:browser": "node scripts/build-browser.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke": "node scripts/smoke.mjs",
+    "prepublishOnly": "npm run typecheck && npm run build && npm run smoke"
+  },
+  "keywords": [
+    "astrology",
+    "svg",
+    "natal-chart",
+    "birth-chart",
+    "horoscope",
+    "zodiac",
+    "vedic",
+    "chart-wheel",
+    "astroway"
+  ],
+  "license": "MIT",
+  "author": "AstroWay <astroway.info@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/astroway/astroway-render.git"
+  },
+  "bugs": {
+    "url": "https://github.com/astroway/astroway-render/issues"
+  },
+  "homepage": "https://api.astroway.info/docs/",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.7",
+    "typescript": "^5.9.3"
+  }
+}
