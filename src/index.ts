@@ -1,5 +1,5 @@
 export { renderWesternWheel } from './wheel-western.ts';
-export type { Planet, Houses, AspectType, Aspect, WheelInput, WheelOptions, OuterLayer } from './wheel-western.ts';
+export type { Planet, Houses, AspectType, Aspect, WheelInput, WheelOptions, OuterLayer, WheelLabels } from './wheel-western.ts';
 export { renderWesternWheelPro } from './wheel-western-pro.ts';
 export type { WheelProOptions } from './wheel-western-pro.ts';
 export { WHEEL_PRO_THEMES, resolveWheelProTheme } from './wheel-theme-data.ts';
@@ -22,5 +22,5 @@ export { renderStarMap } from './star-map.ts';
 export type { StarPoint, StarMapInput, StarMapOptions } from './star-map.ts';
 export { chartDescription } from './chart-description.ts';
 export { astroBodyName } from './body-names.ts';
-export { PLANET_GLYPH, SIGN_GLYPH, SIGN_NAMES, ASPECT_COLOR, THEMES, resolveTheme } from './svg-utils.ts';
-export type { Theme, SvgA11y } from './svg-utils.ts';
+export { PLANET_GLYPH, SIGN_GLYPH, SIGN_NAMES, ASPECT_COLOR, THEMES, resolveTheme, HOOK_CLASSES, HOOK_DATA_ATTRS, bodySlug } from './svg-utils.ts';
+export type { Theme, SvgA11y, BodyWords } from './svg-utils.ts';

@@ -200,7 +200,14 @@ export interface Theme {
   benefic: string;
   malefic: string;
   neutral: string;
+  /** Set by the css theme: colours outside the roles above are wrapped in variables too. */
+  css?: boolean;
 }
+
+/* css mode paints var(--aw-<role>, <light value>) into the presentation attribute: browsers
+   resolve var() there, a page rule still beats an attribute, and with no variable set the
+   output is the light theme byte for byte. Names follow @astroway/ui (kebab-case). */
+const cssVar = (name: string, fallback: string): string => `var(--aw-${name}, ${fallback})`;
 
 export const THEMES: Record<string, Theme> = {
   light: {
@@ -217,6 +224,79 @@ export const THEMES: Record<string, Theme> = {
   },
 };
 
+const L = THEMES.light!;
+THEMES.css = {
+  bg: cssVar('chart-bg', L.bg), ring: cssVar('ring', L.ring), text: cssVar('fg', L.text), textMuted: cssVar('muted', L.textMuted),
+  housesFill: cssVar('houses-fill', L.housesFill), benefic: cssVar('benefic', L.benefic), malefic: cssVar('malefic', L.malefic),
+  neutral: cssVar('neutral', L.neutral), css: true,
+};
+
 export function resolveTheme(name?: string): Theme {
   return THEMES[name ?? 'light'] ?? THEMES.light!;
 }
+
+const ASPECT_ROLE: Record<string, string> = {
+  Conjunction: 'aspect-neutral', Trine: 'aspect-harmonious', Sextile: 'aspect-harmonious',
+  Opposition: 'aspect-tense', Square: 'aspect-tense', Semisquare: 'aspect-tense', Sesquiquadrate: 'aspect-tense',
+  Quincunx: 'aspect-minor', Semisextile: 'aspect-minor', Quintile: 'aspect-quintile', Biquintile: 'aspect-quintile',
+};
+
+/** An aspect's colour in this theme; `fallback` is what the caller used for an unknown aspect. */
+export function aspectColor(t: Theme, name: string, fallback: string): string {
+  const c = ASPECT_COLOR[name];
+  if (c === undefined) return t.css && !fallback.startsWith('var(') ? cssVar('aspect-neutral', fallback) : fallback;
+  return t.css ? cssVar(ASPECT_ROLE[name] ?? 'aspect-neutral', c) : c;
+}
+
+/** A colour the renderer fixes itself (not a theme role), wrapped in a variable in css mode. */
+export function themedColor(t: Theme, name: string, value: string): string {
+  return t.css ? cssVar(name, value) : value;
+}
+
+/* Stable classes and data attributes for page CSS and scripts, css mode only so the default
+   themes stay byte-identical. Names are added to, never renamed: see HOOK_CLASSES. */
+export function hook(t: Theme, a: Attrs): Attrs {
+  return t.css ? a : {};
+}
+
+/** Kebab-case body slug, the same ids the WP plugin uses: `sun`, `north-node`, `lilith`. */
+export function bodySlug(rawName: string): string {
+  return astroBodyName(rawName).toLowerCase().replace(/\s+/g, '-');
+}
+
+export function aspectSlug(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '-');
+}
+
+/** Caller's words for what the renderer would otherwise write in English. */
+export interface BodyWords {
+  /** Keyed by the astrological name: `Sun`, `North Node`, `Lilith`. */
+  bodies?: Record<string, string>;
+  /** Twelve names, Aries first. */
+  signs?: readonly string[];
+  retrograde?: string;
+}
+
+/** "Sun 24°13' Taurus", plus ", retrograde": a planet's data-label, in the caller's words when given. */
+export function bodyLabel(rawName: string, longitude: number, retrograde?: boolean, words: BodyWords = {}): string {
+  const lon = ((longitude % 360) + 360) % 360;
+  const inSign = lon % 30;
+  const deg = Math.floor(inSign);
+  const min = Math.floor((inSign - deg) * 60);
+  const name = astroBodyName(rawName);
+  const sign = Math.floor(lon / 30);
+  return `${words.bodies?.[name] ?? name} ${deg}°${String(min).padStart(2, '0')}' ${words.signs?.[sign] ?? SIGN_NAMES[sign]}`
+    + (retrograde ? `, ${words.retrograde ?? 'retrograde'}` : '');
+}
+
+/** Every class a renderer may emit in css mode; `-<slug>` families listed by prefix. */
+export const HOOK_CLASSES = [
+  'aw-bg', 'aw-ring', 'aw-tick', 'aw-sign', 'aw-sign-*', 'aw-sign-line',
+  'aw-house-cusp', 'aw-house-number', 'aw-axis', 'aw-asc', 'aw-dsc', 'aw-mc', 'aw-ic',
+  'aw-planet', 'aw-planet-*', 'aw-layer-*', 'aw-glyph', 'aw-retro', 'aw-retrograde', 'aw-planet-tick',
+  'aw-aspect', 'aw-aspect-*', 'aw-cross-aspect', 'aw-label', 'aw-axis-label', 'aw-layer-label', 'aw-title',
+  'aw-grid-cell', 'aw-grid-header', 'aw-orb',
+] as const;
+
+/** Every data attribute a renderer may emit in css mode. */
+export const HOOK_DATA_ATTRS = ['data-planet', 'data-label', 'data-a', 'data-b'] as const;

@@ -7,7 +7,7 @@
  */
 
 import { svg, rect, text, resolveTheme,
-  displayBodyName, planetGlyph, ASPECT_COLOR } from './svg-utils.ts';
+  displayBodyName, planetGlyph, aspectColor, hook, bodySlug, aspectSlug } from './svg-utils.ts';
 import type { Planet, Aspect } from './wheel-western.ts';
 
 export interface AspectGridInput {
@@ -63,12 +63,12 @@ export function renderAspectGrid(input: AspectGridInput, opts: AspectGridOptions
     aspectMap.set(key, a);
   }
 
-  let body = rect(0, 0, width, height, { fill: t.bg });
+  let body = rect(0, 0, width, height, { fill: t.bg, ...hook(t, { class: 'aw-bg' }) });
 
   if (opts.title) {
     body += text(width / 2, padding + 18, opts.title, {
       'font-family': 'Inter, sans-serif', 'font-size': 14, 'font-weight': 600,
-      'text-anchor': 'middle', fill: t.text,
+      'text-anchor': 'middle', fill: t.text, ...hook(t, { class: 'aw-label aw-title' }),
     });
   }
 
@@ -80,6 +80,7 @@ export function renderAspectGrid(input: AspectGridInput, opts: AspectGridOptions
     const cx = ox + c * cell + cell / 2;
     body += text(cx, oy - 14, planetGlyph(planets[c]!.name), {
       'font-size': 18, 'text-anchor': 'middle', fill: t.text, 'font-weight': 600,
+      ...hook(t, { class: 'aw-grid-header', 'data-planet': bodySlug(planets[c]!.name) }),
     });
   }
 
@@ -88,29 +89,32 @@ export function renderAspectGrid(input: AspectGridInput, opts: AspectGridOptions
     const cy = oy + (r - 1) * cell + cell / 2;
     body += text(ox - 14, cy + 6, planetGlyph(planets[r]!.name), {
       'font-size': 18, 'text-anchor': 'middle', fill: t.text, 'font-weight': 600,
+      ...hook(t, { class: 'aw-grid-header', 'data-planet': bodySlug(planets[r]!.name) }),
     });
     // Lower-triangle cells: c < r
     for (let c = 0; c < r; c++) {
       const cx = ox + c * cell;
       const yy = oy + (r - 1) * cell;
-      body += rect(cx, yy, cell, cell, {
-        fill: 'none', stroke: t.ring, 'stroke-width': 0.5,
-      });
       const key = [planets[r]!.name, planets[c]!.name].sort().join('|');
       const a = aspectMap.get(key);
+      const pair = { 'data-a': bodySlug(planets[r]!.name), 'data-b': bodySlug(planets[c]!.name) };
+      body += rect(cx, yy, cell, cell, {
+        fill: 'none', stroke: t.ring, 'stroke-width': 0.5, ...hook(t, { class: 'aw-grid-cell', ...pair }),
+      });
       if (a) {
         const typeName = typeof a.type === 'string' ? a.type : a.type.name;
-        const color = ASPECT_COLOR[typeName] ?? t.text;
+        const color = aspectColor(t, typeName, t.text);
         const glyph = ASPECT_GLYPH[typeName] ?? '·';
         body += text(cx + cell / 2, yy + cell / 2 + 2, glyph, {
           'font-size': 16, 'text-anchor': 'middle', fill: color, 'font-weight': 600,
+          ...hook(t, { class: `aw-aspect aw-aspect-${aspectSlug(typeName)}`, ...pair }),
         });
         // Orb (small text below)
         const orbVal = typeof a.type !== 'string' && (a as any).orb !== undefined
           ? (a as any).orb : null;
         if (orbVal !== null) {
           body += text(cx + cell / 2, yy + cell - 4, `${Number(orbVal).toFixed(1)}°`, {
-            'font-size': 8, 'text-anchor': 'middle', fill: t.textMuted,
+            'font-size': 8, 'text-anchor': 'middle', fill: t.textMuted, ...hook(t, { class: 'aw-orb' }),
           });
         }
       }

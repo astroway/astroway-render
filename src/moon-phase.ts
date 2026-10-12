@@ -6,7 +6,7 @@
  * Input: illuminationFraction 0..1, waxing boolean.
  */
 
-import { svg, circle, path, text, resolveTheme } from './svg-utils.ts';
+import { svg, circle, path, text, resolveTheme, themedColor } from './svg-utils.ts';
 
 export interface MoonPhaseInput {
   illuminationFraction: number; // 0 = new, 1 = full
@@ -34,10 +34,10 @@ export function renderMoonPhase(input: MoonPhaseInput, opts: MoonPhaseOptions = 
   let body = `<rect width="${size}" height="${size}" fill="${t.bg}"/>`;
 
   // Dark moon disk (full circle, dark)
-  body += circle(cx, cy, r, { fill: '#15151a', stroke: t.ring, 'stroke-width': 1 });
+  body += circle(cx, cy, r, { fill: themedColor(t, 'moon-shadow', '#15151a'), stroke: t.ring, 'stroke-width': 1 });
 
   if (f > 0.001) {
-    body += renderIlluminatedRegion(cx, cy, r, f, input.waxing);
+    body += renderIlluminatedRegion(cx, cy, r, f, input.waxing, themedColor(t, 'moon-light', '#f5f5f5'));
   }
 
   // Outer ring on top
@@ -72,7 +72,7 @@ export function renderMoonPhase(input: MoonPhaseInput, opts: MoonPhaseOptions = 
  * by |1 - 2f|. f<0.5: only the limb half is lit; f>0.5: full half + crescent
  * extending across.
  */
-function renderIlluminatedRegion(cx: number, cy: number, r: number, f: number, waxing: boolean): string {
+function renderIlluminatedRegion(cx: number, cy: number, r: number, f: number, waxing: boolean, light: string): string {
   const topY = cy - r;
   const botY = cy + r;
   const limbX = cx;
@@ -90,7 +90,7 @@ function renderIlluminatedRegion(cx: number, cy: number, r: number, f: number, w
   const termSweep = (f > 0.5 ? limbSweep : 1 - limbSweep);
 
   const d = `M ${limbStart} A ${r} ${r} 0 0 ${limbSweep} ${limbEnd} A ${tRx} ${r} 0 0 ${termSweep} ${limbStart} Z`;
-  return path(d, { fill: '#f5f5f5', opacity: 0.95 });
+  return path(d, { fill: light, opacity: 0.95 });
 }
 
 function phaseNameFor(f: number, waxing: boolean): string {

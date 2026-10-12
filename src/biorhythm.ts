@@ -10,7 +10,7 @@
  * per-cycle colour and label are presentation, so only those live here.
  */
 
-import { svg, rect, line, text, path, resolveTheme } from './svg-utils.ts';
+import { svg, rect, line, text, path, resolveTheme, themedColor } from './svg-utils.ts';
 import { BIORHYTHM_CYCLES, cycleValue, parseUtcDate, DAY_MS } from './biorhythm-math.ts';
 
 export interface BiorhythmInput {
@@ -36,6 +36,7 @@ const CYCLES = BIORHYTHM_CYCLES.map((c) => ({
   name: CYCLE_STYLE[c.name]!.label,
   period: c.periodDays,
   color: CYCLE_STYLE[c.name]!.color,
+  key: c.name,
 }));
 
 export function renderBiorhythm(input: BiorhythmInput, opts: BiorhythmOptions = {}): string {
@@ -106,14 +107,14 @@ export function renderBiorhythm(input: BiorhythmInput, opts: BiorhythmOptions = 
       points.push(`${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`);
     }
     body += path(points.join(' '), {
-      fill: 'none', stroke: c.color, 'stroke-width': 1.8,
+      fill: 'none', stroke: themedColor(t, `cycle-${c.key}`, c.color), 'stroke-width': 1.8,
     });
   }
 
   // Legend (top-right)
   let lx = x1 - 200;
   for (const c of CYCLES) {
-    body += rect(lx, y0 + 4, 14, 3, { fill: c.color });
+    body += rect(lx, y0 + 4, 14, 3, { fill: themedColor(t, `cycle-${c.key}`, c.color) });
     body += text(lx + 18, y0 + 12, c.name, {
       'font-family': 'JetBrains Mono, monospace', 'font-size': 10,
       fill: t.text, 'font-weight': 500,

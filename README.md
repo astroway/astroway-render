@@ -60,7 +60,25 @@ const svg = renderMoonPhase({ illuminationFraction: 0.37, waxing: true, date: '2
 | `renderEclipsePath` | `eclipse-path` | `/v1/render/eclipse-path` |
 | `renderStarMap` | `star-map` | `/v1/render/star-map` |
 
-Common options: `size`, `theme` (`light`, `dark`, `console`), `title`. Wheels also take `showAspects`, `showRetrograde` and `bodies` (draw only these bodies). Types ship with the package.
+Common options: `size`, `theme` (`light`, `dark`, `console`, `css`), `title`. Wheels also take `showAspects`, `showRetrograde`, `bodies` (draw only these bodies) and `labels`; an outer layer of a bi- or tri-wheel takes `aspects` for the lines between the two charts. Types ship with the package.
+
+## Styling with CSS
+
+`theme: 'css'` paints every colour as `var(--aw-<role>, <light colour>)`, so an SVG inlined into a page takes the page's colours, and with no variable set it looks exactly like `light`:
+
+```css
+.chart { --aw-ring: #444; --aw-fg: currentColor; --aw-chart-bg: transparent; --aw-aspect-tense: crimson; }
+.chart .aw-asc { stroke: orange; }                 /* a class rule beats the variable */
+.chart .aw-planet:hover .aw-glyph { fill: gold; }
+```
+
+In this mode the Western wheels and the aspect grid also carry stable classes (`aw-asc`, `aw-mc`, `aw-planet-sun`, `aw-aspect-trine`, ...) and data attributes: each planet is a `<g>` with `data-planet` (`sun`, `north-node`, `b-sun` on the outer chart) and `data-label`, each aspect line has `data-a` and `data-b`. The full lists are exported as `HOOK_CLASSES` and `HOOK_DATA_ATTRS`; names are added to, never renamed. Inside an `<img>` a page cannot set the variables, so `css` looks like `light` there.
+
+`labels` takes your own words for the axis labels, the SVG `<title>`/`<desc>` and the names inside `data-label`; nothing is translated by the package:
+
+```js
+renderWesternWheel(chart, { theme: 'css', labels: { asc: 'Асц', bodies: { Sun: 'Сонце' }, signs: ['Овен', /* ...12 */] } });
+```
 
 ## Matching the API
 

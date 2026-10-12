@@ -11,10 +11,10 @@
  */
 
 import {
-  svg, circle, line, text,
+  svg, circle, line, text, group,
   polarToCartesian, eclipticToWheel, arcPath,
-  SIGN_GLYPH, ASPECT_COLOR, displayBodyName, planetGlyph, narrowBodies,
-  resolveTheme, type Theme,
+  SIGN_GLYPH, SIGN_NAMES, aspectColor, displayBodyName, planetGlyph, narrowBodies,
+  resolveTheme, hook, bodySlug, aspectSlug, bodyLabel, type Theme, type BodyWords,
 } from './svg-utils.ts';
 import { chartDescription } from './chart-description.ts';
 
@@ -66,17 +66,34 @@ export interface WheelOptions {
    * an outer radius outside the natal wheel.
    */
   outerLayers?: OuterLayer[];
+  /* The caller's words for the axis labels, the SVG <title>/<desc> and each planet's data-label.
+     Absent means today's English. The package does not translate. */
+  labels?: WheelLabels;
+}
+
+export interface WheelLabels extends BodyWords {
+  asc?: string;
+  dsc?: string;
+  mc?: string;
+  ic?: string;
+  title?: string;
+  desc?: string;
 }
 
 export interface OuterLayer {
   planets: Planet[];
   label?: string;       // small caption near the layer
   color?: string;       // override planet glyph color
+  /* Aspects between the inner chart (planet1) and this layer (planet2), drawn as dashed chords
+     inside the aspect circle. Absent means none, so the default output does not change. */
+  aspects?: Aspect[];
 }
 
 /* Lilith is the Moon's mean apogee ("mean Apogee" in the chart response).
    Deliberately not in wheel-vedic: Black Moon Lilith is not a Jyotish body,
    and that list belongs to a different tradition, not a copy of this one. */
+const AXIS_BY_CUSP: Record<number, string> = { 0: 'asc', 3: 'ic', 6: 'dsc', 9: 'mc' };
+
 const DEFAULT_PLANET_SHOWLIST = new Set([
   'Sun', 'Moon', 'Mercury', 'Venus', 'Mars',
   'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto',
@@ -113,26 +130,32 @@ export function renderWesternWheel(wheel: WheelInput, opts: WheelOptions = {}): 
   let body = '';
 
   // Background
-  body += circle(cx, cy, rOuter, { fill: t.bg, stroke: t.ring, 'stroke-width': 1.5 });
+  body += circle(cx, cy, rOuter, { fill: t.bg, stroke: t.ring, 'stroke-width': 1.5, ...hook(t, { class: 'aw-bg' }) });
 
   // ─── Signs ring ──────────────────────────────────────────────
   body += renderSignsRing(cx, cy, rOuter, rSigns, asc, t);
 
   // ─── Houses ring ─────────────────────────────────────────────
-  body += circle(cx, cy, rHouses, { fill: 'none', stroke: t.ring, 'stroke-width': 1 });
-  body += renderHouseCusps(cx, cy, rSigns, rPlanets, rHouses, input.houses, asc, t);
+  body += circle(cx, cy, rHouses, { fill: 'none', stroke: t.ring, 'stroke-width': 1, ...hook(t, { class: 'aw-ring' }) });
+  body += renderHouseCusps(cx, cy, rSigns, rPlanets, rHouses, input.houses, asc, t, opts.labels);
   // House numbers sit inside the houses ring, close to its outer edge,
   // away from the planet glyphs to avoid collision.
   body += renderHouseNumbers(cx, cy, rHouses - 14, input.houses, asc, t);
 
   // ─── Aspect lines (innermost) ────────────────────────────────
   if (showAspects && input.aspects && input.aspects.length > 0) {
-    body += renderAspects(cx, cy, rAspect, input, asc);
+    body += renderAspects(cx, cy, rAspect, input, asc, t);
   }
-  body += circle(cx, cy, rAspect, { fill: 'none', stroke: t.ring, 'stroke-width': 0.5, opacity: 0.4 });
+  for (let i = 0; i < (opts.outerLayers?.length ?? 0); i++) {
+    const layer = opts.outerLayers![i]!;
+    if (layer.aspects?.length) {
+      body += renderCrossAspects(cx, cy, rAspect, visiblePlanets(input.planets), visiblePlanets(narrowBodies(layer.planets, opts.bodies)), layer.aspects, asc, t, i + 1);
+    }
+  }
+  body += circle(cx, cy, rAspect, { fill: 'none', stroke: t.ring, 'stroke-width': 0.5, opacity: 0.4, ...hook(t, { class: 'aw-ring' }) });
 
   // ─── Planet glyphs ───────────────────────────────────────────
-  body += renderPlanets(cx, cy, rPlanets, input.planets, asc, t, opts.showRetrograde !== false);
+  body += renderPlanets(cx, cy, rPlanets, input.planets, asc, t, opts.showRetrograde !== false, opts.labels);
 
   // ─── Outer layers (transit / progressed) ─────────────────────
   if (opts.outerLayers && opts.outerLayers.length > 0) {
@@ -142,51 +165,51 @@ export function renderWesternWheel(wheel: WheelInput, opts: WheelOptions = {}): 
       const rInner = r;
       const rOuterLayer = r + ringWidth;
       // Ring boundary
-      body += circle(cx, cy, rOuterLayer, { fill: 'none', stroke: t.ring, 'stroke-width': 0.8 });
+      body += circle(cx, cy, rOuterLayer, { fill: 'none', stroke: t.ring, 'stroke-width': 0.8, ...hook(t, { class: 'aw-ring' }) });
       // Layer planets at mid-radius
       const rLayer = (rInner + rOuterLayer) / 2;
-      body += renderLayerPlanets(cx, cy, rLayer, narrowBodies(layer.planets, opts.bodies), asc, t, layer.color, opts.showRetrograde !== false);
+      body += renderLayerPlanets(cx, cy, rLayer, narrowBodies(layer.planets, opts.bodies), asc, t, layer.color, opts.showRetrograde !== false, i + 1, opts.labels);
       // Layer label (top-right corner of ring)
       if (layer.label) {
         const lp = polarToCartesian(cx, cy, rLayer, 60); // top-right
         body += text(lp.x, lp.y - 14, layer.label, {
           'font-family': 'JetBrains Mono, monospace', 'font-size': 9,
           'text-anchor': 'middle', fill: t.textMuted,
-          'font-weight': 600,
+          'font-weight': 600, ...hook(t, { class: 'aw-label aw-layer-label' }),
         });
       }
       r = rOuterLayer;
     }
   } else {
     // Single-wheel mode keeps the original outer rim
-    body += circle(cx, cy, rOuter, { fill: 'none', stroke: t.ring, 'stroke-width': 1.2 });
+    body += circle(cx, cy, rOuter, { fill: 'none', stroke: t.ring, 'stroke-width': 1.2, ...hook(t, { class: 'aw-ring' }) });
   }
 
   // ─── Title (optional) ────────────────────────────────────────
   if (opts.title) {
     body += text(cx, 24, opts.title, {
       'font-family': 'Inter, sans-serif', 'font-size': 14, 'font-weight': 600,
-      'text-anchor': 'middle', fill: t.text,
+      'text-anchor': 'middle', fill: t.text, ...hook(t, { class: 'aw-label aw-title' }),
     });
   }
 
   return svg(size, size, body, { 'font-family': 'system-ui, sans-serif' }, {
-    title: opts.ariaTitle ?? opts.title ?? 'Astrological natal chart wheel',
-    desc: opts.ariaDesc ?? chartDescription(input),
+    title: opts.ariaTitle ?? opts.labels?.title ?? opts.title ?? 'Astrological natal chart wheel',
+    desc: opts.ariaDesc ?? opts.labels?.desc ?? chartDescription(input),
   });
 }
 
 // ─── Signs ring ──────────────────────────────────────────────────
 
 function renderSignsRing(cx: number, cy: number, rOuter: number, rInner: number, asc: number, t: Theme): string {
-  let out = `<circle cx="${cx}" cy="${cy}" r="${rInner}" fill="none" stroke="${t.ring}" stroke-width="1"/>`;
+  let out = circle(cx, cy, rInner, { fill: 'none', stroke: t.ring, 'stroke-width': 1, ...hook(t, { class: 'aw-ring' }) });
   // 12 sign divisions: every 30° from 0° Aries
   for (let i = 0; i < 12; i++) {
     const startL = i * 30;
     const wheelStart = eclipticToWheel(startL, asc);
     const p1 = polarToCartesian(cx, cy, rInner, wheelStart);
     const p2 = polarToCartesian(cx, cy, rOuter, wheelStart);
-    out += line(p1.x, p1.y, p2.x, p2.y, { stroke: t.ring, 'stroke-width': 0.8 });
+    out += line(p1.x, p1.y, p2.x, p2.y, { stroke: t.ring, 'stroke-width': 0.8, ...hook(t, { class: 'aw-sign-line' }) });
     // Glyph at sign midpoint (15° into sign)
     const midL = i * 30 + 15;
     const wheelMid = eclipticToWheel(midL, asc);
@@ -194,6 +217,7 @@ function renderSignsRing(cx: number, cy: number, rOuter: number, rInner: number,
     const p = polarToCartesian(cx, cy, rGlyph, wheelMid);
     out += text(p.x, p.y + 5, SIGN_GLYPH[i]!, {
       'font-size': 18, 'text-anchor': 'middle', fill: t.text,
+      ...hook(t, { class: `aw-sign aw-sign-${SIGN_NAMES[i]!.toLowerCase()}` }),
     });
   }
   // Tick marks every 5° on inner edge of sign ring
@@ -203,14 +227,14 @@ function renderSignsRing(cx: number, cy: number, rOuter: number, rInner: number,
     if (tickLen === 0) continue;
     const p1 = polarToCartesian(cx, cy, rInner, wheelDeg);
     const p2 = polarToCartesian(cx, cy, rInner - tickLen, wheelDeg);
-    out += line(p1.x, p1.y, p2.x, p2.y, { stroke: t.textMuted, 'stroke-width': 0.5 });
+    out += line(p1.x, p1.y, p2.x, p2.y, { stroke: t.textMuted, 'stroke-width': 0.5, ...hook(t, { class: 'aw-tick' }) });
   }
   return out;
 }
 
 // ─── House cusps + numbers ───────────────────────────────────────
 
-function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number, rHouses: number, h: Houses, asc: number, t: Theme): string {
+function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number, rHouses: number, h: Houses, asc: number, t: Theme, labels: WheelLabels = {}): string {
   let out = '';
   const cusps = h.cusps;
   for (let i = 0; i < 12; i++) {
@@ -220,12 +244,14 @@ function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number
     const p2 = polarToCartesian(cx, cy, rSigns, wheelDeg);
     // Cardinal cusps (1, 4, 7, 10) bolder
     const isCardinal = i === 0 || i === 3 || i === 6 || i === 9;
+    const axis = AXIS_BY_CUSP[i];
     out += line(p1.x, p1.y, p2.x, p2.y, {
       stroke: isCardinal ? t.text : t.textMuted,
       'stroke-width': isCardinal ? 1.5 : 0.7,
+      ...hook(t, { class: axis ? `aw-house-cusp aw-axis aw-${axis}` : 'aw-house-cusp' }),
     });
     if (isCardinal) {
-      const labelMap: Record<number, string> = { 0: 'ASC', 3: 'IC', 6: 'DSC', 9: 'MC' };
+      const labelMap: Record<number, string> = { 0: labels.asc ?? 'ASC', 3: labels.ic ?? 'IC', 6: labels.dsc ?? 'DSC', 9: labels.mc ?? 'MC' };
       /* Inside the empty band between the house and sign rings, nudged off the
          cusp line. Outside the sign ring a 420px wheel had 7px left for the
          label and clipped ASC and DSC. */
@@ -233,6 +259,7 @@ function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number
       const labelLong = polarToCartesian(cx, cy, rLabel, wheelDeg + (9 / rLabel) * (180 / Math.PI));
       out += text(labelLong.x, labelLong.y + 3.5, labelMap[i]!, {
         'font-size': 10, 'font-weight': 700, 'text-anchor': 'middle', fill: t.text,
+        ...hook(t, { class: `aw-label aw-axis-label aw-${axis}` }),
       });
     }
   }
@@ -250,6 +277,7 @@ function renderHouseNumbers(cx: number, cy: number, r: number, h: Houses, asc: n
     const p = polarToCartesian(cx, cy, r, wheelDeg);
     out += text(p.x, p.y + 4, String(i + 1), {
       'font-size': 11, 'text-anchor': 'middle', fill: t.textMuted, 'font-weight': 500,
+      ...hook(t, { class: 'aw-house-number' }),
     });
   }
   return out;
@@ -257,7 +285,7 @@ function renderHouseNumbers(cx: number, cy: number, r: number, h: Houses, asc: n
 
 // ─── Planet glyphs ───────────────────────────────────────────────
 
-function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, showRetro: boolean): string {
+function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, showRetro: boolean, words?: BodyWords): string {
   const visible = planets.filter((p) => DEFAULT_PLANET_SHOWLIST.has(displayBodyName(p.name)));
   // Anti-collision: bump planets that are within 6° of a previous one
   // outward by 18px increments.
@@ -277,29 +305,42 @@ function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc
     const pos = polarToCartesian(cx, cy, rUse, wheelDeg);
     const glyph = planetGlyph(p.name);
     const isLuminary = p.name === 'Sun' || p.name === 'Moon';
-    out += text(pos.x, pos.y + 6, glyph, {
+    let g = text(pos.x, pos.y + 6, glyph, {
       'font-size': isLuminary ? 22 : 18,
       'text-anchor': 'middle',
       fill: t.text,
       'font-weight': 600,
+      ...hook(t, { class: 'aw-glyph' }),
     });
     if (showRetro && p.isRetrograde) {
-      out += text(pos.x + 12, pos.y + 6, '℞', {
-        'font-size': 10, fill: t.malefic, 'text-anchor': 'middle',
+      g += text(pos.x + 12, pos.y + 6, '℞', {
+        'font-size': 10, fill: t.malefic, 'text-anchor': 'middle', ...hook(t, { class: 'aw-retro' }),
       });
     }
     // Short tick from glyph toward center: positioning indicator without
     // colliding with house numbers (which sit closer to the houses ring).
     const tickP1 = polarToCartesian(cx, cy, rUse - 12, wheelDeg);
     const tickP2 = polarToCartesian(cx, cy, rUse - 18, wheelDeg);
-    out += line(tickP1.x, tickP1.y, tickP2.x, tickP2.y, {
-      stroke: t.textMuted, 'stroke-width': 0.6,
+    g += line(tickP1.x, tickP1.y, tickP2.x, tickP2.y, {
+      stroke: t.textMuted, 'stroke-width': 0.6, ...hook(t, { class: 'aw-planet-tick' }),
     });
+    out += planetGroup(t, g, p, '', '', words);
   }
   return out;
 }
 
-function renderLayerPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, color: string | undefined, showRetro: boolean): string {
+/* Glyph, retrograde mark and tick in one group, so a script hovers the planet as a whole. */
+function planetGroup(t: Theme, content: string, p: Planet, idPrefix: string, extraClass: string, words?: BodyWords): string {
+  if (!t.css) return content;
+  const slug = bodySlug(p.name);
+  return group(content, {
+    class: `aw-planet aw-planet-${slug}${p.isRetrograde ? ' aw-retrograde' : ''}${extraClass}`,
+    'data-planet': idPrefix + slug,
+    'data-label': bodyLabel(p.name, p.longitude, p.isRetrograde, words),
+  });
+}
+
+function renderLayerPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, color: string | undefined, showRetro: boolean, layer: number, words?: BodyWords): string {
   const visible = planets.filter((p) => DEFAULT_PLANET_SHOWLIST.has(displayBodyName(p.name)));
   let out = '';
   const fill = color ?? t.benefic;
@@ -307,21 +348,23 @@ function renderLayerPlanets(cx: number, cy: number, r: number, planets: Planet[]
     const wheelDeg = eclipticToWheel(p.longitude, asc);
     const pos = polarToCartesian(cx, cy, r, wheelDeg);
     const glyph = planetGlyph(p.name);
-    out += text(pos.x, pos.y + 5, glyph, {
-      'font-size': 14, 'text-anchor': 'middle', fill, 'font-weight': 600,
+    let g = text(pos.x, pos.y + 5, glyph, {
+      'font-size': 14, 'text-anchor': 'middle', fill, 'font-weight': 600, ...hook(t, { class: 'aw-glyph' }),
     });
     if (showRetro && p.isRetrograde) {
-      out += text(pos.x + 9, pos.y + 5, '℞', {
-        'font-size': 8, fill: t.malefic, 'text-anchor': 'middle',
+      g += text(pos.x + 9, pos.y + 5, '℞', {
+        'font-size': 8, fill: t.malefic, 'text-anchor': 'middle', ...hook(t, { class: 'aw-retro' }),
       });
     }
+    // b- for the first outer chart, c- for the second: the WP plugin's convention.
+    out += planetGroup(t, g, p, `${String.fromCharCode(97 + layer)}-`, ` aw-layer-${layer}`, words);
   }
   return out;
 }
 
 // ─── Aspects ─────────────────────────────────────────────────────
 
-function renderAspects(cx: number, cy: number, r: number, input: WheelInput, asc: number): string {
+function renderAspects(cx: number, cy: number, r: number, input: WheelInput, asc: number, t: Theme): string {
   const planetById = new Map<string, Planet>();
   for (const p of input.planets) planetById.set(p.name, p);
 
@@ -335,12 +378,43 @@ function renderAspects(cx: number, cy: number, r: number, input: WheelInput, asc
     const c1 = polarToCartesian(cx, cy, r, w1);
     const c2 = polarToCartesian(cx, cy, r, w2);
     const typeName = typeof a.type === 'string' ? a.type : a.type.name;
-    const color = ASPECT_COLOR[typeName] ?? '#888';
+    const color = aspectColor(t, typeName, '#888');
     out += line(c1.x, c1.y, c2.x, c2.y, {
       stroke: color, 'stroke-width': 1, opacity: 0.7,
+      ...hook(t, { class: `aw-aspect aw-aspect-${aspectSlug(typeName)}`, 'data-a': bodySlug(p1.name), 'data-b': bodySlug(p2.name) }),
     });
   }
   return out;
+}
+
+/* Same pair lookup as renderAspects, but each end in its own chart: the Sun inside and the Sun
+   outside are different points. A pair with a hidden body is skipped; a conjunction, whose two
+   ends would coincide, draws a short radial tick instead of a zero-length line. */
+function renderCrossAspects(cx: number, cy: number, r: number, inner: Planet[], outer: Planet[], aspects: Aspect[], asc: number, t: Theme, layer: number): string {
+  const byName = (list: Planet[]) => new Map(list.map((p) => [p.name, p]));
+  const a1 = byName(inner);
+  const a2 = byName(outer);
+  const prefix = `${String.fromCharCode(97 + layer)}-`;
+  let out = '';
+  for (const a of aspects) {
+    const p1 = a1.get(a.planet1);
+    const p2 = a2.get(a.planet2);
+    if (!p1 || !p2) continue;
+    const typeName = typeof a.type === 'string' ? a.type : a.type.name;
+    const w1 = eclipticToWheel(p1.longitude, asc);
+    const w2 = eclipticToWheel(p2.longitude, asc);
+    const c1 = polarToCartesian(cx, cy, r, w1);
+    const c2 = Math.abs(((w1 - w2 + 540) % 360) - 180) < 0.5 ? polarToCartesian(cx, cy, r - 10, w1) : polarToCartesian(cx, cy, r, w2);
+    out += line(c1.x, c1.y, c2.x, c2.y, {
+      stroke: aspectColor(t, typeName, '#888'), 'stroke-width': 1, opacity: 0.7, 'stroke-dasharray': '4 3',
+      ...hook(t, { class: `aw-aspect aw-aspect-${aspectSlug(typeName)} aw-cross-aspect aw-layer-${layer}`, 'data-a': bodySlug(p1.name), 'data-b': prefix + bodySlug(p2.name) }),
+    });
+  }
+  return out;
+}
+
+function visiblePlanets(planets: Planet[]): Planet[] {
+  return planets.filter((p) => DEFAULT_PLANET_SHOWLIST.has(displayBodyName(p.name)));
 }
 
 // Re-exports for convenience

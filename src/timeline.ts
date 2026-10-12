@@ -3,7 +3,7 @@
  * over a date window. Rows = events, X axis = time, color = severity/type.
  */
 
-import { svg, rect, line, text, resolveTheme, ASPECT_COLOR } from './svg-utils.ts';
+import { svg, rect, line, text, resolveTheme, aspectColor } from './svg-utils.ts';
 
 export interface TimelineEvent {
   label: string;            // e.g., "Saturn ☐ Sun"
@@ -86,7 +86,7 @@ export function renderTimeline(input: TimelineInput, opts: TimelineOptions = {})
     const evEnd = parseDate(ev.end);
     const bx = x0 + ((evStart - start) / rangeMs) * trackW;
     const bw = Math.max(2, ((evEnd - evStart) / rangeMs) * trackW);
-    const color = ev.color ?? ASPECT_COLOR[ev.category ?? ''] ?? t.benefic;
+    const color = ev.color ?? aspectColor(t, ev.category ?? '', t.benefic);
     body += rect(bx, yMid - 7, bw, 14, {
       fill: color, opacity: 0.7, rx: 2, ry: 2,
     });
