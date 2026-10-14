@@ -1,4 +1,4 @@
-import { svg, circle, line, text, path, polarToCartesian, eclipticToWheel,
+import { svg, circle, line, text, path, polarToCartesian, eclipticToWheel, spreadOnArc,
   displayBodyName, planetGlyph, SIGN_GLYPH, SIGN_NAMES } from './svg-utils.ts';
 import { resolveWheelProTheme, type WheelProTheme } from './wheel-theme-data.ts';
 import type { WheelInput } from './wheel-western.ts';
@@ -161,14 +161,20 @@ const SHOWLIST = new Set(['Sun','Moon','Mercury','Venus','Mars','Jupiter','Satur
 
 function renderPlanetsPro(cx: number, cy: number, r: number, planets: WheelInput['planets'], asc: number, t: WheelProTheme): string {
   const visible = planets.filter((p) => SHOWLIST.has(displayBodyName(p.name)));
-  const sorted = [...visible].sort((a, b) => a.longitude - b.longitude);
-  const radii = new Map<number, number>();
-  let last = -Infinity, stack = 0;
-  for (const p of sorted) { if (Math.abs(p.longitude - last) < 6) stack++; else stack = 0; radii.set(p.id, r + stack * 18); last = p.longitude; }
+  /* Along the ring, not outward (see spreadOnArc); the degree label is the widest part. */
+  const box = (p: WheelInput['planets'][number]) => {
+    const fs = (p.name === 'Sun' || p.name === 'Moon') ? t.planets.fontSize + 4 : t.planets.fontSize;
+    return {
+      w: Math.max(p.isRetrograde ? 2 * (12 + 4) : fs * 0.8, t.planets.showDegreeLabel ? 26 : 0),
+      h: fs * 0.9 + (t.planets.showDegreeLabel ? 10 : 0),
+    };
+  };
+  const drawn = spreadOnArc(visible.map((p) => ({ id: p.id, deg: eclipticToWheel(p.longitude, asc), ...box(p) })), r);
   let out = '';
   for (const p of visible) {
-    const w = eclipticToWheel(p.longitude, asc);
-    const rUse = radii.get(p.id) ?? r;
+    const trueDeg = eclipticToWheel(p.longitude, asc);
+    const w = drawn.get(p.id) ?? trueDeg;
+    const rUse = r;
     const pos = polarToCartesian(cx, cy, rUse, w);
     const isLum = p.name === 'Sun' || p.name === 'Moon';
     out += text(pos.x, pos.y + 6, planetGlyph(p.name), {
@@ -184,8 +190,12 @@ function renderPlanetsPro(cx: number, cy: number, r: number, planets: WheelInput
       });
     }
     // pointer tick toward center
-    const t1 = polarToCartesian(cx, cy, rUse - 12, w), t2 = polarToCartesian(cx, cy, rUse - 18, w);
+    const t1 = polarToCartesian(cx, cy, rUse - 12, trueDeg), t2 = polarToCartesian(cx, cy, rUse - 18, trueDeg);
     out += line(t1.x, t1.y, t2.x, t2.y, { stroke: t.planets.pointerColor, 'stroke-width': 0.6 });
+    if (Math.abs(((w - trueDeg + 540) % 360) - 180) > 0.5) {
+      const from = polarToCartesian(cx, cy, rUse - 11, w);
+      out += line(from.x, from.y, t1.x, t1.y, { stroke: t.planets.pointerColor, 'stroke-width': 0.4 });
+    }
   }
   return out;
 }

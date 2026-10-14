@@ -112,6 +112,63 @@ export function polarToCartesian(cx: number, cy: number, r: number, wheelAngleDe
   return { x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) };
 }
 
+/**
+ * Spread glyphs along an arc so neighbours keep a chord of at least the sum of
+ * their half widths. `deg` is each body's true wheel angle, `w` and `h` its box
+ * in px (glyph, retrograde mark, label). Boxes are upright, so the spacing a
+ * pair needs depends on where on the ring it sits: their widths where the ring
+ * runs across, their heights where it runs up and down, the smaller of the two
+ * between. Close bodies become a
+ * cluster laid out at exactly the minimum spacing and centred on their true
+ * angles; clusters that then touch merge. The circle is cut at its widest
+ * empty gap, so a group across 0° stays one group. Returns the drawn angle.
+ */
+export function spreadOnArc(items: Array<{ id: number; deg: number; w: number; h: number }>, r: number, gapPx = 3): Map<number, number> {
+  const out = new Map<number, number>();
+  if (!items.length) return out;
+  const toDeg = (px: number) => (px / r) * (180 / Math.PI);
+  const sorted = [...items].sort((a, b) => a.deg - b.deg);
+  /* Start just after the widest empty gap, then unwrap so angles only grow. */
+  let cut = 0, widest = -1;
+  for (let i = 0; i < sorted.length; i++) {
+    const next = i + 1 < sorted.length ? sorted[i + 1]!.deg : sorted[0]!.deg + 360;
+    if (next - sorted[i]!.deg > widest) { widest = next - sorted[i]!.deg; cut = (i + 1) % sorted.length; }
+  }
+  const seq = [...sorted.slice(cut), ...sorted.slice(0, cut)];
+  const base = seq[0]!.deg;
+  const angles = seq.map((it) => ((it.deg - base) % 360 + 360) % 360 + base);
+  const need = (i: number) => {
+    const a = (angles[i]! + angles[i + 1]!) / 2 * (Math.PI / 180);
+    const across = Math.abs(Math.sin(a)), upDown = Math.abs(Math.cos(a));
+    const w = (seq[i]!.w + seq[i + 1]!.w) / 2 + gapPx, h = (seq[i]!.h + seq[i + 1]!.h) / 2 + gapPx;
+    return toDeg(Math.min(across > 1e-6 ? w / across : Infinity, upDown > 1e-6 ? h / upDown : Infinity));
+  };
+  type Cluster = { from: number; to: number; offsets: number[] };
+  const place = (c: Cluster) => {
+    const mean = angles.slice(c.from, c.to + 1).reduce((a, b) => a + b, 0) / (c.to - c.from + 1);
+    const om = c.offsets.reduce((a, b) => a + b, 0) / c.offsets.length;
+    return c.offsets.map((o) => mean + o - om);
+  };
+  let clusters: Cluster[] = seq.map((_, i) => ({ from: i, to: i, offsets: [0] }));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let k = 0; k + 1 < clusters.length; k++) {
+      const a = clusters[k]!, b = clusters[k + 1]!;
+      const pa = place(a), pb = place(b);
+      if (pb[0]! - pa[pa.length - 1]! < need(a.to) - 1e-9) {
+        const offsets = [...a.offsets];
+        let o = offsets[offsets.length - 1]!;
+        for (let i = b.from; i <= b.to; i++) { o += need(i - 1); offsets.push(o); }
+        clusters.splice(k, 2, { from: a.from, to: b.to, offsets });
+        changed = true;
+        break;
+      }
+    }
+  }
+  for (const c of clusters) place(c).forEach((d, j) => out.set(seq[c.from + j]!.id, ((d % 360) + 360) % 360));
+  return out;
+}
+
 /** Ecliptic longitude (0..360, 0=Aries) → wheel angle (0..360, 180=ASC).
  *
  * Longitude is added, not subtracted: polarToCartesian maps a rising wheel
@@ -293,7 +350,7 @@ export function bodyLabel(rawName: string, longitude: number, retrograde?: boole
 export const HOOK_CLASSES = [
   'aw-bg', 'aw-ring', 'aw-tick', 'aw-sign', 'aw-sign-*', 'aw-sign-line',
   'aw-house-cusp', 'aw-house-number', 'aw-axis', 'aw-asc', 'aw-dsc', 'aw-mc', 'aw-ic',
-  'aw-planet', 'aw-planet-*', 'aw-layer-*', 'aw-glyph', 'aw-retro', 'aw-retrograde', 'aw-planet-tick',
+  'aw-planet', 'aw-planet-*', 'aw-layer-*', 'aw-glyph', 'aw-retro', 'aw-retrograde', 'aw-planet-tick', 'aw-planet-pointer',
   'aw-aspect', 'aw-aspect-*', 'aw-cross-aspect', 'aw-label', 'aw-axis-label', 'aw-layer-label', 'aw-title',
   'aw-grid-cell', 'aw-grid-header', 'aw-orb',
 ] as const;

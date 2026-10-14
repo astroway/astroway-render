@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- `wheel-western` and the pro wheel spread close planets along the planet ring instead of stacking them outward. Glyphs and retrograde marks no longer touch each other or the house numbers in a dense chart (a stellium, a group across 0° Aries). A moved glyph keeps a tick at its true degree with a thin line to it (`aw-planet-pointer` in the css theme).
+
 ## 0.2.0
 
 - `theme: 'css'`: every colour is painted as `var(--aw-<role>, <light colour>)` inside the presentation attribute, so the page that inlines the SVG can recolour it with CSS custom properties. With no variable set it looks exactly like `light`. Variables: `--aw-chart-bg`, `--aw-fg`, `--aw-muted`, `--aw-ring`, `--aw-houses-fill`, `--aw-benefic`, `--aw-malefic`, `--aw-aspect-harmonious`, `--aw-aspect-tense`, `--aw-aspect-neutral`, `--aw-aspect-minor`, `--aw-aspect-quintile`, `--aw-moon-shadow`, `--aw-moon-light`, `--aw-cycle-physical`, `--aw-cycle-emotional`, `--aw-cycle-intellectual`.

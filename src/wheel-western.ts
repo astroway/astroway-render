@@ -12,7 +12,7 @@
 
 import {
   svg, circle, line, text, group,
-  polarToCartesian, eclipticToWheel, arcPath,
+  polarToCartesian, eclipticToWheel, arcPath, spreadOnArc,
   SIGN_GLYPH, SIGN_NAMES, aspectColor, displayBodyName, planetGlyph, narrowBodies,
   resolveTheme, hook, bodySlug, aspectSlug, bodyLabel, type Theme, type BodyWords,
 } from './svg-utils.ts';
@@ -287,22 +287,21 @@ function renderHouseNumbers(cx: number, cy: number, r: number, h: Houses, asc: n
 
 function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, showRetro: boolean, words?: BodyWords): string {
   const visible = planets.filter((p) => DEFAULT_PLANET_SHOWLIST.has(displayBodyName(p.name)));
-  // Anti-collision: bump planets that are within 6° of a previous one
-  // outward by 18px increments.
-  const sorted = [...visible].sort((a, b) => a.longitude - b.longitude);
-  const radii = new Map<number, number>();
-  let lastLong = -Infinity;
-  let stack = 0;
-  for (const p of sorted) {
-    if (Math.abs(p.longitude - lastLong) < 6) stack++; else stack = 0;
-    radii.set(p.id, r + stack * 18);
-    lastLong = p.longitude;
-  }
+  /* Spread along the planet ring rather than stacking outward: an outward
+     stack ran into the house numbers and 18 px steps left 18-22 px glyphs
+     touching (kb, Hillary Clinton's Mars and Pluto). */
+  /* Glyph box from its font size; the ℞ sits 12 px right of centre, so a
+     retrograde body is boxed symmetrically to its right edge. */
+  const box = (p: Planet) => {
+    const fs = (p.name === 'Sun' || p.name === 'Moon') ? 22 : 18;
+    return { w: showRetro && p.isRetrograde ? 2 * (12 + 4) : fs * 0.8, h: fs * 0.9 };
+  };
+  const drawn = spreadOnArc(visible.map((p) => ({ id: p.id, deg: eclipticToWheel(p.longitude, asc), ...box(p) })), r);
   let out = '';
   for (const p of visible) {
     const wheelDeg = eclipticToWheel(p.longitude, asc);
-    const rUse = radii.get(p.id) ?? r;
-    const pos = polarToCartesian(cx, cy, rUse, wheelDeg);
+    const at = drawn.get(p.id) ?? wheelDeg;
+    const pos = polarToCartesian(cx, cy, r, at);
     const glyph = planetGlyph(p.name);
     const isLuminary = p.name === 'Sun' || p.name === 'Moon';
     let g = text(pos.x, pos.y + 6, glyph, {
@@ -317,13 +316,19 @@ function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc
         'font-size': 10, fill: t.malefic, 'text-anchor': 'middle', ...hook(t, { class: 'aw-retro' }),
       });
     }
-    // Short tick from glyph toward center: positioning indicator without
-    // colliding with house numbers (which sit closer to the houses ring).
-    const tickP1 = polarToCartesian(cx, cy, rUse - 12, wheelDeg);
-    const tickP2 = polarToCartesian(cx, cy, rUse - 18, wheelDeg);
+    // Tick at the true degree, inside the glyph, away from the house numbers;
+    // a moved glyph gets a thin line to it.
+    const tickP1 = polarToCartesian(cx, cy, r - 12, wheelDeg);
+    const tickP2 = polarToCartesian(cx, cy, r - 18, wheelDeg);
     g += line(tickP1.x, tickP1.y, tickP2.x, tickP2.y, {
       stroke: t.textMuted, 'stroke-width': 0.6, ...hook(t, { class: 'aw-planet-tick' }),
     });
+    if (Math.abs(((at - wheelDeg + 540) % 360) - 180) > 0.5) {
+      const from = polarToCartesian(cx, cy, r - 11, at);
+      g += line(from.x, from.y, tickP1.x, tickP1.y, {
+        stroke: t.textMuted, 'stroke-width': 0.4, ...hook(t, { class: 'aw-planet-pointer' }),
+      });
+    }
     out += planetGroup(t, g, p, '', '', words);
   }
   return out;
