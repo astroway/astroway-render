@@ -237,10 +237,14 @@ function renderSignsRing(cx: number, cy: number, rOuter: number, rInner: number,
 function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number, rHouses: number, h: Houses, asc: number, t: Theme, labels: WheelLabels = {}): string {
   let out = '';
   const cusps = h.cusps;
+  /* Lines start past the planet ring: from its centre they crossed out any glyph
+     on a cusp (kb 2026-10-14, Messi's Jupiter on IC). A 22 px luminary reaches
+     ~11 px out and a ℞ at DSC ~16 px, glyph sizes are fixed in px. */
+  const rStart = Math.min(rInner + 20, rHouses - 2);
   for (let i = 0; i < 12; i++) {
     const cusp = cusps[i]!;
     const wheelDeg = eclipticToWheel(cusp, asc);
-    const p1 = polarToCartesian(cx, cy, rInner, wheelDeg);
+    const p1 = polarToCartesian(cx, cy, rStart, wheelDeg);
     const p2 = polarToCartesian(cx, cy, rSigns, wheelDeg);
     // Cardinal cusps (1, 4, 7, 10) bolder
     const isCardinal = i === 0 || i === 3 || i === 6 || i === 9;

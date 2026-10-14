@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- House cusp and axis lines (`ASC`, `DSC`, `MC`, `IC`) on the Western wheel start past the planet ring instead of at its centre, so a planet on a cusp is no longer crossed out by the line.
+
 ## 0.2.1
 
 - `wheel-western` and the pro wheel spread close planets along the planet ring instead of stacking them outward. Glyphs and retrograde marks no longer touch each other or the house numbers in a dense chart (a stellium, a group across 0° Aries). A moved glyph keeps a tick at its true degree with a thin line to it (`aw-planet-pointer` in the css theme).
