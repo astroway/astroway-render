@@ -1,6 +1,6 @@
 {
   "name": "@astroway/render",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "The SVG chart renderers behind api.astroway.info /v1/render/*: natal, bi- and tri-wheels, Vedic charts, aspect grid, cosmogram, moon phase, timeline, biorhythm, eclipse path, star map. Pure functions, chart data in, SVG string out, no DOM and no Node APIs.",
   "type": "module",
   "sideEffects": false,

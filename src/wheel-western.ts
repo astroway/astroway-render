@@ -69,6 +69,13 @@ export interface WheelOptions {
   /* The caller's words for the axis labels, the SVG <title>/<desc> and each planet's data-label.
      Absent means today's English. The package does not translate. */
   labels?: WheelLabels;
+  /**
+   * Multiplies the text against the wheel: house numbers, ASC/DSC/MC/IC, planet glyphs and the
+   * retrograde mark, with the signs ring widened and the planet ring moved in to make room. 1 (default) is
+   * today's look; a page that draws a 560 wheel at 343 px passes about 1.6 to keep house numbers near
+   * 11 px on screen. Sign glyphs are always sized to fit their ring, at any size.
+   */
+  labelScale?: number;
 }
 
 export interface WheelLabels extends BodyWords {
@@ -118,10 +125,15 @@ export function renderWesternWheel(wheel: WheelInput, opts: WheelOptions = {}): 
 
   const rOuter = size * 0.475;
   const rNatalOuter = rOuter - totalLayerRoom;     // wheel structure ends here when layers
-  const rSigns = (rNatalOuter ?? rOuter) - size * 0.025;
+  const ls = labelScale(opts.labelScale);
+  /* The signs ring widens with the labels so its glyphs grow too (they are sized to fit the ring). */
+  const rSigns = (rNatalOuter ?? rOuter) - size * 0.025 * ls;
   const rHouses = (rNatalOuter ?? rOuter) - size * 0.10;
-  const rPlanets = (rNatalOuter ?? rOuter) - size * 0.20;
-  const rAspect = (rNatalOuter ?? rOuter) - size * 0.225;
+  /* Larger labels need the planet ring further in: house numbers sit 14·ls inside the houses ring,
+     a luminary reaches 11·ls out from its centre, its tick 18·ls in (kb.astroway.info 2026-10-22). */
+  const rPlanetsDefault = (rNatalOuter ?? rOuter) - size * 0.20;
+  const rPlanets = ls === 1 ? rPlanetsDefault : Math.min(rPlanetsDefault, rHouses - 14 * ls - 6 * ls - 11 * ls - 3);
+  const rAspect = ls === 1 ? (rNatalOuter ?? rOuter) - size * 0.225 : Math.max(size * 0.08, rPlanets - 18 * ls - 3);
   const t = resolveTheme(opts.theme);
 
   const asc = input.houses.ascendant;
@@ -133,14 +145,14 @@ export function renderWesternWheel(wheel: WheelInput, opts: WheelOptions = {}): 
   body += circle(cx, cy, rOuter, { fill: t.bg, stroke: t.ring, 'stroke-width': 1.5, ...hook(t, { class: 'aw-bg' }) });
 
   // ─── Signs ring ──────────────────────────────────────────────
-  body += renderSignsRing(cx, cy, rOuter, rSigns, asc, t);
+  body += renderSignsRing(cx, cy, rOuter, rSigns, asc, t, size * 0.025 * ls);
 
   // ─── Houses ring ─────────────────────────────────────────────
   body += circle(cx, cy, rHouses, { fill: 'none', stroke: t.ring, 'stroke-width': 1, ...hook(t, { class: 'aw-ring' }) });
-  body += renderHouseCusps(cx, cy, rSigns, rPlanets, rHouses, input.houses, asc, t, opts.labels);
+  body += renderHouseCusps(cx, cy, rSigns, rPlanets, rHouses, input.houses, asc, t, opts.labels, ls);
   // House numbers sit inside the houses ring, close to its outer edge,
   // away from the planet glyphs to avoid collision.
-  body += renderHouseNumbers(cx, cy, rHouses - 14, input.houses, asc, t);
+  body += renderHouseNumbers(cx, cy, rHouses - 14 * ls, input.houses, asc, t, ls);
 
   // ─── Aspect lines (innermost) ────────────────────────────────
   if (showAspects && input.aspects && input.aspects.length > 0) {
@@ -155,7 +167,7 @@ export function renderWesternWheel(wheel: WheelInput, opts: WheelOptions = {}): 
   body += circle(cx, cy, rAspect, { fill: 'none', stroke: t.ring, 'stroke-width': 0.5, opacity: 0.4, ...hook(t, { class: 'aw-ring' }) });
 
   // ─── Planet glyphs ───────────────────────────────────────────
-  body += renderPlanets(cx, cy, rPlanets, input.planets, asc, t, opts.showRetrograde !== false, opts.labels);
+  body += renderPlanets(cx, cy, rPlanets, input.planets, asc, t, opts.showRetrograde !== false, opts.labels, ls);
 
   // ─── Outer layers (transit / progressed) ─────────────────────
   if (opts.outerLayers && opts.outerLayers.length > 0) {
@@ -168,7 +180,7 @@ export function renderWesternWheel(wheel: WheelInput, opts: WheelOptions = {}): 
       body += circle(cx, cy, rOuterLayer, { fill: 'none', stroke: t.ring, 'stroke-width': 0.8, ...hook(t, { class: 'aw-ring' }) });
       // Layer planets at mid-radius
       const rLayer = (rInner + rOuterLayer) / 2;
-      body += renderLayerPlanets(cx, cy, rLayer, narrowBodies(layer.planets, opts.bodies), asc, t, layer.color, opts.showRetrograde !== false, i + 1, opts.labels);
+      body += renderLayerPlanets(cx, cy, rLayer, narrowBodies(layer.planets, opts.bodies), asc, t, layer.color, opts.showRetrograde !== false, i + 1, opts.labels, ls);
       // Layer label (top-right corner of ring)
       if (layer.label) {
         const lp = polarToCartesian(cx, cy, rLayer, 60); // top-right
@@ -201,7 +213,9 @@ export function renderWesternWheel(wheel: WheelInput, opts: WheelOptions = {}): 
 
 // ─── Signs ring ──────────────────────────────────────────────────
 
-function renderSignsRing(cx: number, cy: number, rOuter: number, rInner: number, asc: number, t: Theme): string {
+/* `band` is the signs ring's own width; on a bi- or tri-wheel rOuter also spans the outer layers. */
+function renderSignsRing(cx: number, cy: number, rOuter: number, rInner: number, asc: number, t: Theme, band: number): string {
+  const fs = round2(Math.min(18 * Math.max(1, band / 20), band * 0.9));
   let out = circle(cx, cy, rInner, { fill: 'none', stroke: t.ring, 'stroke-width': 1, ...hook(t, { class: 'aw-ring' }) });
   // 12 sign divisions: every 30° from 0° Aries
   for (let i = 0; i < 12; i++) {
@@ -215,8 +229,9 @@ function renderSignsRing(cx: number, cy: number, rOuter: number, rInner: number,
     const wheelMid = eclipticToWheel(midL, asc);
     const rGlyph = (rOuter + rInner) / 2;
     const p = polarToCartesian(cx, cy, rGlyph, wheelMid);
-    out += text(p.x, p.y + 5, SIGN_GLYPH[i]!, {
-      'font-size': 18, 'text-anchor': 'middle', fill: t.text,
+    /* The glyph fits its ring: 18 px in a 14 px ring (a 560 wheel) crossed the ring lines (kb 2026-10-22). */
+    out += text(p.x, p.y + (fs * 5) / 18, SIGN_GLYPH[i]!, {
+      'font-size': fs, 'text-anchor': 'middle', fill: t.text,
       ...hook(t, { class: `aw-sign aw-sign-${SIGN_NAMES[i]!.toLowerCase()}` }),
     });
   }
@@ -234,13 +249,13 @@ function renderSignsRing(cx: number, cy: number, rOuter: number, rInner: number,
 
 // ─── House cusps + numbers ───────────────────────────────────────
 
-function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number, rHouses: number, h: Houses, asc: number, t: Theme, labels: WheelLabels = {}): string {
+function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number, rHouses: number, h: Houses, asc: number, t: Theme, labels: WheelLabels = {}, ls = 1): string {
   let out = '';
   const cusps = h.cusps;
   /* Lines start past the planet ring: from its centre they crossed out any glyph
      on a cusp (kb 2026-10-14, Messi's Jupiter on IC). A 22 px luminary reaches
      ~11 px out and a ℞ at DSC ~16 px, glyph sizes are fixed in px. */
-  const rStart = Math.min(rInner + 20, rHouses - 2);
+  const rStart = Math.min(rInner + 20 * ls, rHouses - 2);
   for (let i = 0; i < 12; i++) {
     const cusp = cusps[i]!;
     const wheelDeg = eclipticToWheel(cusp, asc);
@@ -260,9 +275,9 @@ function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number
          cusp line. Outside the sign ring a 420px wheel had 7px left for the
          label and clipped ASC and DSC. */
       const rLabel = (rSigns + rHouses) / 2;
-      const labelLong = polarToCartesian(cx, cy, rLabel, wheelDeg + (9 / rLabel) * (180 / Math.PI));
-      out += text(labelLong.x, labelLong.y + 3.5, labelMap[i]!, {
-        'font-size': 10, 'font-weight': 700, 'text-anchor': 'middle', fill: t.text,
+      const labelLong = polarToCartesian(cx, cy, rLabel, wheelDeg + ((9 * ls) / rLabel) * (180 / Math.PI));
+      out += text(labelLong.x, labelLong.y + 3.5 * ls, labelMap[i]!, {
+        'font-size': round2(10 * ls), 'font-weight': 700, 'text-anchor': 'middle', fill: t.text,
         ...hook(t, { class: `aw-label aw-axis-label aw-${axis}` }),
       });
     }
@@ -270,7 +285,7 @@ function renderHouseCusps(cx: number, cy: number, rSigns: number, rInner: number
   return out;
 }
 
-function renderHouseNumbers(cx: number, cy: number, r: number, h: Houses, asc: number, t: Theme): string {
+function renderHouseNumbers(cx: number, cy: number, r: number, h: Houses, asc: number, t: Theme, ls = 1): string {
   let out = '';
   for (let i = 0; i < 12; i++) {
     const c1 = h.cusps[i]!;
@@ -279,8 +294,8 @@ function renderHouseNumbers(cx: number, cy: number, r: number, h: Houses, asc: n
     if (c2 < c1) mid = ((c1 + c2 + 360) / 2) % 360;
     const wheelDeg = eclipticToWheel(mid, asc);
     const p = polarToCartesian(cx, cy, r, wheelDeg);
-    out += text(p.x, p.y + 4, String(i + 1), {
-      'font-size': 11, 'text-anchor': 'middle', fill: t.textMuted, 'font-weight': 500,
+    out += text(p.x, p.y + 4 * ls, String(i + 1), {
+      'font-size': round2(11 * ls), 'text-anchor': 'middle', fill: t.textMuted, 'font-weight': 500,
       ...hook(t, { class: 'aw-house-number' }),
     });
   }
@@ -289,7 +304,7 @@ function renderHouseNumbers(cx: number, cy: number, r: number, h: Houses, asc: n
 
 // ─── Planet glyphs ───────────────────────────────────────────────
 
-function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, showRetro: boolean, words?: BodyWords): string {
+function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, showRetro: boolean, words?: BodyWords, ls = 1): string {
   const visible = planets.filter((p) => DEFAULT_PLANET_SHOWLIST.has(displayBodyName(p.name)));
   /* Spread along the planet ring rather than stacking outward: an outward
      stack ran into the house numbers and 18 px steps left 18-22 px glyphs
@@ -297,8 +312,8 @@ function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc
   /* Glyph box from its font size; the ℞ sits 12 px right of centre, so a
      retrograde body is boxed symmetrically to its right edge. */
   const box = (p: Planet) => {
-    const fs = (p.name === 'Sun' || p.name === 'Moon') ? 22 : 18;
-    return { w: showRetro && p.isRetrograde ? 2 * (12 + 4) : fs * 0.8, h: fs * 0.9 };
+    const fs = ((p.name === 'Sun' || p.name === 'Moon') ? 22 : 18) * ls;
+    return { w: showRetro && p.isRetrograde ? 2 * (12 + 4) * ls : fs * 0.8, h: fs * 0.9 };
   };
   const drawn = spreadOnArc(visible.map((p) => ({ id: p.id, deg: eclipticToWheel(p.longitude, asc), ...box(p) })), r);
   let out = '';
@@ -308,27 +323,27 @@ function renderPlanets(cx: number, cy: number, r: number, planets: Planet[], asc
     const pos = polarToCartesian(cx, cy, r, at);
     const glyph = planetGlyph(p.name);
     const isLuminary = p.name === 'Sun' || p.name === 'Moon';
-    let g = text(pos.x, pos.y + 6, glyph, {
-      'font-size': isLuminary ? 22 : 18,
+    let g = text(pos.x, pos.y + 6 * ls, glyph, {
+      'font-size': round2((isLuminary ? 22 : 18) * ls),
       'text-anchor': 'middle',
       fill: t.text,
       'font-weight': 600,
       ...hook(t, { class: 'aw-glyph' }),
     });
     if (showRetro && p.isRetrograde) {
-      g += text(pos.x + 12, pos.y + 6, '℞', {
-        'font-size': 10, fill: t.malefic, 'text-anchor': 'middle', ...hook(t, { class: 'aw-retro' }),
+      g += text(pos.x + 12 * ls, pos.y + 6 * ls, '℞', {
+        'font-size': round2(10 * ls), fill: t.malefic, 'text-anchor': 'middle', ...hook(t, { class: 'aw-retro' }),
       });
     }
     // Tick at the true degree, inside the glyph, away from the house numbers;
     // a moved glyph gets a thin line to it.
-    const tickP1 = polarToCartesian(cx, cy, r - 12, wheelDeg);
-    const tickP2 = polarToCartesian(cx, cy, r - 18, wheelDeg);
+    const tickP1 = polarToCartesian(cx, cy, r - 12 * ls, wheelDeg);
+    const tickP2 = polarToCartesian(cx, cy, r - 18 * ls, wheelDeg);
     g += line(tickP1.x, tickP1.y, tickP2.x, tickP2.y, {
       stroke: t.textMuted, 'stroke-width': 0.6, ...hook(t, { class: 'aw-planet-tick' }),
     });
     if (Math.abs(((at - wheelDeg + 540) % 360) - 180) > 0.5) {
-      const from = polarToCartesian(cx, cy, r - 11, at);
+      const from = polarToCartesian(cx, cy, r - 11 * ls, at);
       g += line(from.x, from.y, tickP1.x, tickP1.y, {
         stroke: t.textMuted, 'stroke-width': 0.4, ...hook(t, { class: 'aw-planet-pointer' }),
       });
@@ -349,7 +364,7 @@ function planetGroup(t: Theme, content: string, p: Planet, idPrefix: string, ext
   });
 }
 
-function renderLayerPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, color: string | undefined, showRetro: boolean, layer: number, words?: BodyWords): string {
+function renderLayerPlanets(cx: number, cy: number, r: number, planets: Planet[], asc: number, t: Theme, color: string | undefined, showRetro: boolean, layer: number, words?: BodyWords, ls = 1): string {
   const visible = planets.filter((p) => DEFAULT_PLANET_SHOWLIST.has(displayBodyName(p.name)));
   let out = '';
   const fill = color ?? t.benefic;
@@ -357,12 +372,12 @@ function renderLayerPlanets(cx: number, cy: number, r: number, planets: Planet[]
     const wheelDeg = eclipticToWheel(p.longitude, asc);
     const pos = polarToCartesian(cx, cy, r, wheelDeg);
     const glyph = planetGlyph(p.name);
-    let g = text(pos.x, pos.y + 5, glyph, {
-      'font-size': 14, 'text-anchor': 'middle', fill, 'font-weight': 600, ...hook(t, { class: 'aw-glyph' }),
+    let g = text(pos.x, pos.y + 5 * ls, glyph, {
+      'font-size': round2(14 * ls), 'text-anchor': 'middle', fill, 'font-weight': 600, ...hook(t, { class: 'aw-glyph' }),
     });
     if (showRetro && p.isRetrograde) {
-      g += text(pos.x + 9, pos.y + 5, '℞', {
-        'font-size': 8, fill: t.malefic, 'text-anchor': 'middle', ...hook(t, { class: 'aw-retro' }),
+      g += text(pos.x + 9 * ls, pos.y + 5 * ls, '℞', {
+        'font-size': round2(8 * ls), fill: t.malefic, 'text-anchor': 'middle', ...hook(t, { class: 'aw-retro' }),
       });
     }
     // b- for the first outer chart, c- for the second: the WP plugin's convention.
@@ -425,6 +440,13 @@ function renderCrossAspects(cx: number, cy: number, r: number, inner: Planet[], 
 function visiblePlanets(planets: Planet[]): Planet[] {
   return planets.filter((p) => DEFAULT_PLANET_SHOWLIST.has(displayBodyName(p.name)));
 }
+
+/** 1 unless a finite number between 0.5 and 3 is given. */
+function labelScale(v: number | undefined): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(3, Math.max(0.5, v)) : 1;
+}
+
+const round2 = (x: number) => Math.round(x * 100) / 100;
 
 // Re-exports for convenience
 export { polarToCartesian, eclipticToWheel, arcPath };

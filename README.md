@@ -60,7 +60,7 @@ const svg = renderMoonPhase({ illuminationFraction: 0.37, waxing: true, date: '2
 | `renderEclipsePath` | `eclipse-path` | `/v1/render/eclipse-path` |
 | `renderStarMap` | `star-map` | `/v1/render/star-map` |
 
-Common options: `size`, `theme` (`light`, `dark`, `console`, `css`), `title`. Wheels also take `showAspects`, `showRetrograde`, `bodies` (draw only these bodies) and `labels`; an outer layer of a bi- or tri-wheel takes `aspects` for the lines between the two charts. Types ship with the package.
+Common options: `size`, `theme` (`light`, `dark`, `console`, `css`), `title`. Wheels also take `showAspects`, `showRetrograde`, `bodies` (draw only these bodies), `labels` and `labelScale` (Western wheels: text larger against the wheel, for a wheel shown smaller than its `size`); an outer layer of a bi- or tri-wheel takes `aspects` for the lines between the two charts. Types ship with the package.
 
 ## Styling with CSS
 

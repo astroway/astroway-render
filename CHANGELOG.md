@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- `labelScale` on `renderWesternWheel` (and the bi- and tri-wheel): multiplies the house numbers, `ASC`/`DSC`/`MC`/`IC`, planet glyphs and the retrograde mark against the wheel, widens the signs ring and moves the planet ring in to make room. `1` (default) is the previous look; `0.5` to `3`. A page that draws a 560 wheel at 343 px passes about `1.6` to keep house numbers near 11 px on screen.
+- Sign glyphs are sized to fit their ring at any `size`. Below 800 they used to keep 18 px in a narrower ring and cross its lines (a 560 wheel had a 14 px ring). At 800 and above the output is unchanged byte for byte.
+
 ## 0.2.2
 
 - House cusp and axis lines (`ASC`, `DSC`, `MC`, `IC`) on the Western wheel start past the planet ring instead of at its centre, so a planet on a cusp is no longer crossed out by the line.
